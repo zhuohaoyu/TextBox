@@ -30,7 +30,6 @@ class C2S(AttributeGenerator):
         self.num_dec_layers = config['num_dec_layers']
         self.dropout_ratio = config['dropout_ratio']
         self.rnn_type = config['rnn_type']
-
         self.eval_generate_num = config['eval_generate_num']
         self.max_length = config['max_seq_length']
         self.is_gated = config['gated']
@@ -60,7 +59,7 @@ class C2S(AttributeGenerator):
         )
 
         self.vocab_linear = nn.Linear(self.hidden_size, self.vocab_size)
-        self.attr_linear = nn.Linear(total_emb_size, self.hidden_size * self.num_dec_layers)
+        self.attr_linear = nn.Linear(total_emb_size, self.hidden_size)
 
         if self.is_gated:
             self.gate_hc_linear = nn.Linear(total_emb_size, self.hidden_size)
@@ -88,16 +87,16 @@ class C2S(AttributeGenerator):
 
         attr_embeddings = torch.cat(attr_embeddings, dim=1)
 
-        h_c = torch.relu(self.attr_linear(attr_embeddings))
-
-        h_c = h_c.reshape(-1, self.num_dec_layers, self.hidden_size)
-        h_c = h_c.permute(1, 0, 2).contiguous()
+        h_c = torch.tanh(self.attr_linear(attr_embeddings))
+        h_c = h_c.repeat(self.num_dec_layers, 1, 1)
+        # h_c = h_c.reshape(-1, self.num_dec_layers, self.hidden_size)
+        # h_c = h_c.permute(1, 0, 2).contiguous()
 
         input_embeddings = self.token_embedder(input_text)
         outputs, hidden_states = self.decoder(input_embeddings, h_c)
 
         if self.is_gated:
-            h_c_1D = torch.relu(self.gate_hc_linear(attr_embeddings))
+            h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
             m_t = torch.sigmoid(self.gate_linear(outputs)).permute(1, 0, 2)
             m_t = (m_t * h_c_1D).permute(1, 0, 2)
             outputs = torch.add(outputs, m_t)
@@ -128,10 +127,11 @@ class C2S(AttributeGenerator):
 
         attr_embeddings = torch.cat(attr_embeddings, dim=1)
 
-        h_c = torch.relu(self.attr_linear(attr_embeddings)).contiguous()
+        h_c = torch.tanh(self.attr_linear(attr_embeddings))
+        h_c = h_c.repeat(self.num_dec_layers, 1, 1).contiguous()
 
         if self.is_gated:
-            h_c_1D = torch.relu(self.gate_hc_linear(attr_embeddings))
+            h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
 
         generated_corpus = []
         idx2token = eval_data.idx2token
