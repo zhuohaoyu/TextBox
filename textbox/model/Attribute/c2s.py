@@ -128,7 +128,7 @@ class C2S(AttributeGenerator):
         attr_embeddings = torch.cat(attr_embeddings, dim=1)
 
         h_c = torch.tanh(self.attr_linear(attr_embeddings))
-        h_c = h_c.repeat(self.num_dec_layers, 1, 1).contiguous()
+        # h_c = h_c.repeat(self.num_dec_layers, 1, 1).contiguous()
 
         if self.is_gated:
             h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
@@ -144,7 +144,8 @@ class C2S(AttributeGenerator):
             generated_tokens = []
             input_seq = torch.LongTensor([[self.sos_token_idx]]).to(self.device)
             hidden_states = h_c[data_idx].to(self.device)
-            hidden_states = hidden_states.reshape(self.num_dec_layers, 1, self.hidden_size).contiguous()
+            hidden_states = hidden_states.reshape(1, 1, self.hidden_size)
+            hidden_states = hidden_states.repeat(self.num_dec_layers, 1, 1).contiguous()
             if (self.decoding_strategy == 'beam_search'):
                 hypothesis = Beam_Search_Hypothesis(
                     self.beam_size, self.sos_token_idx, self.eos_token_idx, self.device, idx2token
