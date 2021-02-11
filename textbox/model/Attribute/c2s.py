@@ -95,7 +95,7 @@ class C2S(AttributeGenerator):
         input_embeddings = self.token_embedder(input_text)
 
         if self.is_gated:
-            input_embeddings = input_embeddings.permute(1, 0, 2) * h_c_1D
+            input_embeddings = input_embeddings.permute(1, 0, 2) + h_c_1D
             input_embeddings = input_embeddings.permute(1, 0, 2).contiguous()
 
         outputs, hidden_states = self.decoder(input_embeddings, h_c)
@@ -161,7 +161,7 @@ class C2S(AttributeGenerator):
                 decoder_input = self.token_embedder(input_seq)
 
                 if self.is_gated:
-                    decoder_input = decoder_input * h_c_1D[data_idx]
+                    decoder_input = decoder_input + h_c_1D[data_idx]
                 
                 outputs, hidden_states = self.decoder(decoder_input, hidden_states)
 
