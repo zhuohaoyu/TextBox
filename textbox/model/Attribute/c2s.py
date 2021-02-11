@@ -62,7 +62,7 @@ class C2S(AttributeGenerator):
         self.attr_linear = nn.Linear(total_emb_size, self.hidden_size)
 
         if self.is_gated:
-            self.gate_hc_linear = nn.Linear(total_emb_size, self.hidden_size)
+            # self.gate_hc_linear = nn.Linear(total_emb_size, self.hidden_size)
             self.gate_linear = nn.Linear(self.hidden_size, self.hidden_size)
 
         self.dropout = nn.Dropout(self.dropout_ratio)
@@ -87,16 +87,21 @@ class C2S(AttributeGenerator):
 
         attr_embeddings = torch.cat(attr_embeddings, dim=1)
 
-        h_c = torch.tanh(self.attr_linear(attr_embeddings))
-        h_c = h_c.repeat(self.num_dec_layers, 1, 1)
+        h_c_1D = torch.tanh(self.attr_linear(attr_embeddings))
+        h_c = h_c_1D.repeat(self.num_dec_layers, 1, 1)
         # h_c = h_c.reshape(-1, self.num_dec_layers, self.hidden_size)
         # h_c = h_c.permute(1, 0, 2).contiguous()
 
         input_embeddings = self.token_embedder(input_text)
+
+        if self.is_gated:
+            input_embeddings = input_embeddings.permute(1, 0, 2) * h_c_1D
+            input_embeddings = input_embeddings.permute(1, 0, 2).contiguous()
+
         outputs, hidden_states = self.decoder(input_embeddings, h_c)
 
         if self.is_gated:
-            h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
+            # h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
             m_t = torch.sigmoid(self.gate_linear(outputs)).permute(1, 0, 2)
             m_t = (m_t * h_c_1D).permute(1, 0, 2)
             outputs = torch.add(outputs, m_t)
@@ -127,23 +132,25 @@ class C2S(AttributeGenerator):
 
         attr_embeddings = torch.cat(attr_embeddings, dim=1)
 
-        h_c = torch.tanh(self.attr_linear(attr_embeddings))
+        # Encoder
+
+        h_c_1D = torch.tanh(self.attr_linear(attr_embeddings))
         # h_c = h_c.repeat(self.num_dec_layers, 1, 1).contiguous()
 
-        if self.is_gated:
-            h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
+        # if self.is_gated:
+            # h_c_1D = torch.tanh(self.gate_hc_linear(attr_embeddings))
 
         generated_corpus = []
         idx2token = eval_data.idx2token
 
         # Decoder
 
-        cur_batch_size = len(h_c)
+        cur_batch_size = len(h_c_1D)
 
         for data_idx in range(cur_batch_size):
             generated_tokens = []
             input_seq = torch.LongTensor([[self.sos_token_idx]]).to(self.device)
-            hidden_states = h_c[data_idx].to(self.device)
+            hidden_states = h_c_1D[data_idx].to(self.device)
             hidden_states = hidden_states.reshape(1, 1, self.hidden_size)
             hidden_states = hidden_states.repeat(self.num_dec_layers, 1, 1).contiguous()
             if (self.decoding_strategy == 'beam_search'):
@@ -152,6 +159,10 @@ class C2S(AttributeGenerator):
                 )
             for gen_idx in range(self.max_length):
                 decoder_input = self.token_embedder(input_seq)
+
+                if self.is_gated:
+                    decoder_input = decoder_input * h_c_1D[data_idx]
+                
                 outputs, hidden_states = self.decoder(decoder_input, hidden_states)
 
                 if self.is_gated:
@@ -193,7 +204,6 @@ class C2S(AttributeGenerator):
         return generated_corpus
 
     def generate(self, eval_data):
-        # Encoder
         generated_corpus = []
         indx = 0
         for corpus in eval_data:
