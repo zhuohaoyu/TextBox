@@ -55,7 +55,7 @@ class C2S(AttributeGenerator):
             total_emb_size += min(self.embedding_size, self.attribute_size[i])
 
         self.decoder = BasicRNNDecoder(
-            self.embedding_size, self.hidden_size, self.num_dec_layers, self.rnn_type, self.dropout_ratio
+            2 * self.embedding_size, self.hidden_size, self.num_dec_layers, self.rnn_type, self.dropout_ratio
         )
 
         self.vocab_linear = nn.Linear(self.hidden_size, self.vocab_size)
@@ -92,10 +92,10 @@ class C2S(AttributeGenerator):
         # h_c = h_c.reshape(-1, self.num_dec_layers, self.hidden_size)
         # h_c = h_c.permute(1, 0, 2).contiguous()
 
-        input_embeddings = self.token_embedder(input_text)
+        input_embeddings = self.token_embedder(input_text).permute(1, 0, 2)
 
-        # if self.is_gated:
-        input_embeddings = input_embeddings.permute(1, 0, 2) + h_c_1D
+        input_embeddings = torch.cat([input_embeddings, h_c_1D.expand_as(input_embeddings)], dim=-1)
+
         input_embeddings = input_embeddings.permute(1, 0, 2).contiguous()
 
         outputs, hidden_states = self.decoder(input_embeddings, h_c)
@@ -161,7 +161,7 @@ class C2S(AttributeGenerator):
                 decoder_input = self.token_embedder(input_seq)
 
                 # if self.is_gated:
-                decoder_input = decoder_input + h_c_1D[data_idx]
+                decoder_input = torch.cat([decoder_input , h_c_1D[data_idx].expand_as(decoder_input)], dim=-1)
                 
                 outputs, hidden_states = self.decoder(decoder_input, hidden_states)
 
